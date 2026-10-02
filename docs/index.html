@@ -195,21 +195,21 @@ details.card[open] > summary::after { content: "접기"; }
         </label>
         <label class="f"><span><b>번역 경로</b></span>
           <select id="trVia">
+            <option value="relay" selected>Toyrisu 릴레이 (Claude Opus)</option>
             <option value="vercel">Vercel AI Gateway (같은 키)</option>
-            <option value="relay">내 릴레이 (OpenAI 호환 주소)</option>
           </select>
         </label>
       </div>
       <div class="form" id="relayWrap" hidden>
-        <label class="f"><span><b>릴레이 주소</b> — PocketRisu 에 넣은 주소 그대로 (…/v1 까지 또는 …/chat/completions 까지)</span>
-          <input id="relayUrl" type="text" spellcheck="false" autocomplete="off" placeholder="https://codex.zcxv.xyz/…/v1">
+        <label class="f"><span><b>릴레이 주소</b> (OpenAI 호환 Chat Completions)</span>
+          <input id="relayUrl" type="text" spellcheck="false" autocomplete="off" value="https://codex.zcxv.xyz/claude/v1">
         </label>
         <div class="grid2">
-          <label class="f"><span><b>릴레이 키</b> (없으면 비워 두기)</span>
-            <input id="relayKey" type="password" spellcheck="false" autocomplete="off">
+          <label class="f"><span><b>릴레이 키</b> — 이 기기 브라우저에만 저장됩니다</span>
+            <input id="relayKey" type="password" spellcheck="false" autocomplete="off" placeholder="sk-tr-...">
           </label>
-          <label class="f"><span><b>모델 이름</b> (PocketRisu 에서 쓰는 이름)</span>
-            <input id="relayModel" type="text" spellcheck="false" autocomplete="off" placeholder="예) claude-opus-5-5">
+          <label class="f"><span><b>모델</b></span>
+            <input id="relayModel" type="text" spellcheck="false" autocomplete="off" value="claude-opus-5-5">
           </label>
         </div>
       </div>
@@ -249,7 +249,7 @@ details.card[open] > summary::after { content: "접기"; }
 const GATEWAY = "https://ai-gateway.vercel.sh";
 const SR = 16000;                 // 받아쓰기로 보내는 샘플레이트
 const CHUNK_MIN = 40, CHUNK_TARGET = 60, CHUNK_MAX = 75;    // 초. 16kHz WAV 75초 ≈ 2.4MB
-const TR_BATCH = 60, TR_CONTEXT = 8;
+const TR_BATCH = 60, RELAY_BATCH = 40, TR_CONTEXT = 8;
 const HALLUCINATIONS = ["ご視聴ありがとうございました", "ご清聴ありがとうございました", "チャンネル登録", "最後までご視聴"];
 const PRICES = { "anthropic/claude-opus-5.5": [4, 20], "anthropic/claude-sonnet-5.5": [2, 10] }; // $/1M 토큰
 
@@ -529,43 +529,53 @@ function parseLines(text) {
     return { refused: false, map: new Map((data.lines || []).map((l) => [Number(l.id), String(l.ko || "").trim()])) };
   } catch { return { refused: false, map: new Map(), bad: true }; }
 }
-function sseText(raw) {   // 스트림으로 돌아와도 내용만 모으기
-  let out = "";
-  for (const line of raw.split("\n")) {
-    const d = line.replace(/^data:\s?/, "").trim();
-    if (!line.startsWith("data:") || !d || d === "[DONE]") continue;
-    try { const j = JSON.parse(d); out += j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ""; } catch {}
-  }
-  return out;
-}
 async function relayTranslate(batch, prev, context) {
   let url = $("relayUrl").value.trim().replace(/\/+$/, "");
   const model = $("relayModel").value.trim(), key = $("relayKey").value.trim();
-  if (!url || !model) throw new ApiError(0, "설정에서 릴레이 주소와 모델 이름을 넣어 주세요.");
+  if (!url || !model) throw new ApiError(0, "설정에서 릴레이 주소와 모델을 넣어 주세요.");
+  if (!key) throw new ApiError(0, "설정에서 릴레이 키를 넣어 주세요.");
   if (!/\/chat\/completions$/.test(url)) url += "/chat/completions";
-  const body = { model, stream: false, messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: buildPrompt(batch, prev, context) }] };
+  // 스트림으로 받음: Cloudflare 가 100초 넘게 조용한 응답을 끊기 때문
+  const body = { model, stream: true, messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: buildPrompt(batch, prev, context) }] };
   for (let attempt = 0; ; attempt++) {
     let r;
     try {
-      r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) }, body: JSON.stringify(body) });
+      r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${key}` }, body: JSON.stringify(body) });
     } catch {
       if (attempt < 2) { await sleep(3000 * 2 ** attempt); continue; }
       throw new ApiError(0, "릴레이에 연결하지 못했습니다. 주소를 확인해 주세요.");
     }
     if (!r.ok) {
       const t = (await r.text().catch(() => "")).slice(0, 200);
-      if ([429, 500, 502, 503, 504].includes(r.status) && attempt < 2) { await sleep(3000 * 2 ** attempt); continue; }
-      if (r.status === 401 || r.status === 403) throw new ApiError(r.status, "릴레이가 키를 거부했습니다. 설정의 릴레이 키를 확인해 주세요.");
-      if (r.status === 404) throw new ApiError(r.status, "릴레이 주소에서 /chat/completions 를 찾지 못했습니다. PocketRisu 에 넣은 주소와 같은지 확인해 주세요.");
+      if ([429, 500, 502, 503, 504, 524].includes(r.status) && attempt < 2) { await sleep(3000 * 2 ** attempt); continue; }
+      if (r.status === 401 || r.status === 403 || r.status === 404) throw new ApiError(r.status, `릴레이가 요청을 거부했습니다 (${r.status}). 키나 주소가 틀리면 이렇게 나옵니다. 설정의 릴레이 키를 확인해 주세요.`);
       throw new ApiError(r.status, `릴레이 오류 ${r.status}: ${t}`);
     }
-    const raw = await r.text();
-    if (/^\s*data:/.test(raw)) return parseLines(sseText(raw));
-    let j; try { j = JSON.parse(raw); } catch { return parseLines(raw); }
-    const choice = j.choices?.[0] || {};
-    if (j.usage) addUsage(model, { input_tokens: j.usage.prompt_tokens, output_tokens: j.usage.completion_tokens });
-    if (choice.finish_reason === "content_filter") return { refused: true, map: new Map() };
-    return parseLines(choice.message?.content || "");
+    let text = "", finish = "", buf = "", raw = "";
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const chunk = dec.decode(value, { stream: true });
+      raw += chunk; buf += chunk;
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const d = line.slice(5).trim(); if (!d || d === "[DONE]") continue;
+        try {
+          const j = JSON.parse(d), c = j.choices?.[0];
+          text += c?.delta?.content ?? c?.message?.content ?? "";
+          if (c?.finish_reason) finish = c.finish_reason;
+          if (j.usage) addUsage(model, { input_tokens: j.usage.prompt_tokens, output_tokens: j.usage.completion_tokens });
+        } catch {}
+      }
+    }
+    if (!text && !/^\s*data:/m.test(raw)) {   // 스트림을 안 쓰는 릴레이면 일반 JSON
+      try { const j = JSON.parse(raw), c = j.choices?.[0]; text = c?.message?.content || ""; finish = c?.finish_reason || ""; } catch { text = raw; }
+    }
+    if (finish === "content_filter") return { refused: true, map: new Map() };
+    return parseLines(text);
   }
 }
 async function translateBatch(batch, prev, context) {
@@ -633,8 +643,9 @@ async function runJob(entry, { retranslate = false } = {}) {
     rec.lines.forEach((l, i) => (l.id = i));
     const todo = rec.lines.filter((l) => !l.ko || l.failed);
     let done = rec.lines.length - todo.length, refusedCount = 0;
-    for (let i = 0; i < todo.length; i += TR_BATCH) {
-      const batch = todo.slice(i, i + TR_BATCH);
+    const step = $("trVia").value === "relay" ? RELAY_BATCH : TR_BATCH;
+    for (let i = 0; i < todo.length; i += step) {
+      const batch = todo.slice(i, i + step);
       const firstIdx = batch[0].id;
       const prev = rec.lines.slice(Math.max(0, firstIdx - TR_CONTEXT), firstIdx).filter((l) => l.ko);
       say(`번역 ${done + 1}–${done + batch.length} / ${rec.lines.length}줄`);

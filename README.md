@@ -14,7 +14,9 @@ RJ01234567/
 
 설치 없이 폰 브라우저에서 파일을 열면 자막을 만들고, 자막을 띄운 채 재생합니다.
 
-- **API 키는 그 기기 브라우저에만 저장**됩니다. Vercel AI Gateway 키 하나로 받아쓰기(MAI-Transcribe-2 / Grok STT)와 번역(Claude)을 모두 처리합니다.
+- **키는 그 기기 브라우저에만 저장**됩니다.
+  - 받아쓰기: Vercel AI Gateway 키 (MAI-Transcribe-2 / Grok STT)
+  - 번역: 기본은 **Toyrisu 릴레이** (`https://codex.zcxv.xyz/claude/v1`, 모델 `claude-opus-5-5`, OpenAI 호환 Chat Completions). 설정에 릴레이 키(`sk-tr-…`)만 넣으면 됩니다. Vercel 키로 번역하도록 바꿀 수도 있습니다.
 - 만든 자막은 브라우저에 `파일이름@크기` 로 저장됩니다. 다음에 같은 파일을 열면 자동으로 붙습니다. 음성 파일 자체는 저장하지 않습니다.
 - WAV 는 통째로 메모리에 올리지 않고 필요한 부분만 읽습니다. 1분 안팎으로 잘라 보내고, 조각마다 중간 저장을 하므로 탭이 꺼져도 **이어서 만들기**로 계속할 수 있습니다.
 - BGM·효과음 있는 버전과 없는 버전처럼 타이밍이 같은 파일은 **다른 자막 연결**로 자막을 공유합니다. 받아쓰기는 효과음 없는 버전으로 하는 편이 정확합니다.
@@ -31,7 +33,9 @@ RJ01234567/
    - `--asr vercel` (기본): [Vercel AI Gateway](https://vercel.com/ai-gateway) 의 **MAI-Transcribe-2** / **Grok STT**. GPU 필요 없음.
      30일마다 $5 무료 크레딧 → 한 달 약 50시간 분량 (크레딧을 직접 구매하면 무료 지급이 끊기니 주의)
    - `--asr local`: 내 PC에서 faster-whisper (large-v3). 무료지만 NVIDIA GPU 권장
-2. **Claude API** 로 앞뒤 문맥·캐릭터 말투를 살려 한국어 번역 — 유료 (아래 비용 참고)
+2. 앞뒤 문맥·캐릭터 말투를 살려 한국어 번역 — 둘 중 선택
+   - `--translator relay` (기본): Toyrisu 릴레이 (`https://codex.zcxv.xyz/claude/v1`, `claude-opus-5-5`, OpenAI 호환). 키는 `TOYRISU_API_KEY`
+   - `--translator claude`: Anthropic API 직접. 키는 `ANTHROPIC_API_KEY`
 
 ## 설치 (윈도우 기준)
 
@@ -43,8 +47,9 @@ RJ01234567/
    ```
 4. **API 키** (명령 프롬프트를 새로 열어야 적용됨)
    ```
-   setx AI_GATEWAY_API_KEY "..."     ← 받아쓰기 (Vercel 대시보드 → AI Gateway → API Keys)
-   setx ANTHROPIC_API_KEY "sk-ant-..."  ← 번역 (https://console.anthropic.com)
+   setx AI_GATEWAY_API_KEY "..."      ← 받아쓰기 (Vercel 대시보드 → AI Gateway → API Keys)
+   setx TOYRISU_API_KEY "sk-tr-..."    ← 번역 (Toyrisu 릴레이)
+   setx ANTHROPIC_API_KEY "sk-ant-..." ← --translator claude 를 쓸 때만
    ```
 
 `--asr local` 을 쓸 때만 `pip install faster-whisper` 가 추가로 필요합니다.
@@ -85,7 +90,9 @@ python jp2ko.py track01.mp3 --asr local
 | `--retranslate` | 받아쓰기는 그대로 두고 번역만 다시 (`--context` 바꿨을 때) |
 | `--force` | 캐시 무시하고 처음부터 |
 | `--model` | `--asr local` Whisper 모델: `large-v3`(기본) / `medium` / `small` |
-| `--effort` | 번역 공들이는 정도: `low` / `medium`(기본) / `high` |
+| `--translator` | 번역 경로: `relay`(기본, Toyrisu) / `claude`(Anthropic API) |
+| `--relay-url` / `--relay-model` | 릴레이 주소·모델 (기본 `https://codex.zcxv.xyz/claude/v1` / `claude-opus-5-5`) |
+| `--effort` | `--translator claude` 번역 공들이는 정도: `low` / `medium`(기본) / `high` |
 
 받아쓰기 결과는 `*.jp2ko.json` 으로 캐시되므로, 번역만 다시 돌릴 때는 받아쓰기를 반복하지 않습니다.
 

@@ -1,3 +1,4 @@
+# --translator claude 를 쓸 때만 필요
 anthropic>=1.11
 # --asr local 을 쓸 때만 필요
 # faster-whisper>=1.1

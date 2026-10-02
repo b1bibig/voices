@@ -35,6 +35,9 @@ HALLUCINATIONS = [
 ]
 
 CLAUDE_MODEL = "claude-opus-5-5"
+RELAY_URL = "https://codex.zcxv.xyz/claude/v1"   # Toyrisu 릴레이 (OpenAI 호환 Chat Completions)
+RELAY_MODEL = "claude-opus-5-5"
+RELAY_CHUNK_SIZE = 40
 CHUNK_SIZE = 60      # 한 번에 번역할 줄 수
 CONTEXT_LINES = 8    # 다음 묶음에 넘겨줄 직전 번역 줄 수
 
@@ -212,15 +215,98 @@ def translate_chunk(client, chunk: list[Segment], previous: list[Segment], args)
     return {line["id"]: line["ko"].strip() for line in data["lines"]}
 
 
-def translate(segments: list[Segment], args) -> None:
-    import anthropic
+def parse_lines(text: str) -> dict[int, str]:
+    m = re.search(r"\{.*\}", text, re.S)
+    try:
+        data = json.loads(m.group(0) if m else text)
+        return {int(line["id"]): str(line["ko"]).strip() for line in data["lines"]}
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return {}
 
-    client = anthropic.Anthropic(max_retries=4)
+
+def translate_chunk_relay(chunk: list[Segment], previous: list[Segment], args) -> dict[int, str]:
+    """OpenAI 호환 릴레이로 번역. Cloudflare 100초 제한을 피하려고 스트림으로 받는다."""
+    import os
+    import time
+    import urllib.error
+    import urllib.request
+
+    key = os.environ.get("TOYRISU_API_KEY")
+    if not key:
+        sys.exit("TOYRISU_API_KEY 환경변수가 없습니다 (Toyrisu 릴레이 키).")
+    url = args.relay_url.rstrip("/")
+    if not url.endswith("/chat/completions"):
+        url += "/chat/completions"
+    body = {
+        "model": args.relay_model,
+        "stream": True,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT + '\n- 출력은 {"lines":[{"id":번호,"ko":"번역"}]} 형태의 JSON 하나.'},
+            {"role": "user", "content": build_prompt(chunk, previous, args.context)},
+        ],
+    }
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={
+        "Authorization": f"Bearer {key}", "Content-Type": "application/json", "Accept": "text/event-stream",
+    })
+    for attempt in range(3):
+        try:
+            text, raw, finish = "", "", ""
+            with urllib.request.urlopen(req, timeout=600) as resp:
+                for line in resp:
+                    line = line.decode("utf-8", "replace")
+                    raw += line
+                    if not line.startswith("data:"):
+                        continue
+                    d = line[5:].strip()
+                    if not d or d == "[DONE]":
+                        continue
+                    try:
+                        c = (json.loads(d).get("choices") or [{}])[0]
+                    except json.JSONDecodeError:
+                        continue
+                    text += (c.get("delta") or {}).get("content") or (c.get("message") or {}).get("content") or ""
+                    finish = c.get("finish_reason") or finish
+            if not text and not raw.lstrip().startswith("data:"):  # 스트림을 안 쓰는 릴레이
+                c = (json.loads(raw).get("choices") or [{}])[0]
+                text, finish = (c.get("message") or {}).get("content") or "", c.get("finish_reason") or ""
+            if finish == "content_filter":
+                print("  ! 번역이 거절됨 — 이 묶음은 일본어로 남깁니다.")
+                return {}
+            result = parse_lines(text)
+            if not result:
+                print("  ! 번역 결과를 읽지 못함 — 일본어로 남깁니다.")
+            return result
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403, 404):
+                sys.exit(f"릴레이가 요청을 거부했습니다 ({e.code}). 키나 주소가 틀리면 이렇게 나옵니다. TOYRISU_API_KEY 를 확인하세요.")
+            if e.code in (429, 500, 502, 503, 504, 524) and attempt < 2:
+                time.sleep(3 * 2 ** attempt)
+                continue
+            print(f"  ! 릴레이 오류 ({e.code}) — 이 묶음은 일본어로 남깁니다.")
+            return {}
+        except (urllib.error.URLError, TimeoutError):
+            if attempt < 2:
+                time.sleep(3 * 2 ** attempt)
+                continue
+            print("  ! 릴레이 연결 실패 — 이 묶음은 일본어로 남깁니다.")
+            return {}
+    return {}
+
+
+def translate(segments: list[Segment], args) -> None:
+    if args.translator == "relay":
+        client, size = None, RELAY_CHUNK_SIZE
+    else:
+        import anthropic
+        client, size = anthropic.Anthropic(max_retries=4), CHUNK_SIZE
     previous: list[Segment] = []
-    for i in range(0, len(segments), CHUNK_SIZE):
-        chunk = segments[i:i + CHUNK_SIZE]
+    for i in range(0, len(segments), size):
+        chunk = segments[i:i + size]
         print(f"  번역 중… {i + 1}-{i + len(chunk)} / {len(segments)}", flush=True)
-        result = translate_chunk(client, chunk, previous, args)
+        if client is None:
+            result = translate_chunk_relay(chunk, previous, args)
+        else:
+            result = translate_chunk(client, chunk, previous, args)
         missing = 0
         for seg in chunk:
             seg.ko = result.get(seg.id, "")
@@ -336,6 +422,10 @@ def main() -> None:
     ap.add_argument("--prompt", help="Whisper 힌트 (캐릭터 이름 등 고유명사를 일본어로)")
     ap.add_argument("--retranslate", action="store_true", help="받아쓰기 캐시는 두고 번역만 다시")
     ap.add_argument("--force", action="store_true", help="캐시 무시하고 처음부터 다시")
+    ap.add_argument("--translator", default="relay", choices=["relay", "claude"],
+                    help="번역 경로: relay(Toyrisu 릴레이, 기본, TOYRISU_API_KEY) / claude(Anthropic API, ANTHROPIC_API_KEY)")
+    ap.add_argument("--relay-url", default=RELAY_URL)
+    ap.add_argument("--relay-model", default=RELAY_MODEL)
     ap.add_argument("--claude-model", default=CLAUDE_MODEL)
     ap.add_argument("--effort", default="medium", choices=["low", "medium", "high", "xhigh", "max"])
     args = ap.parse_args()
