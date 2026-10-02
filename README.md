@@ -11,22 +11,27 @@ RJ01234567/
 ```
 
 동작 방식:
-1. **faster-whisper (large-v3)** 로 일본어를 받아쓰기 — 내 PC에서 돌아감, 무료
+1. **일본어 받아쓰기** — 둘 중 선택
+   - `--asr vercel` (기본): [Vercel AI Gateway](https://vercel.com/ai-gateway) 의 **MAI-Transcribe-2** / **Grok STT**. GPU 필요 없음.
+     30일마다 $5 무료 크레딧 → 한 달 약 50시간 분량 (크레딧을 직접 구매하면 무료 지급이 끊기니 주의)
+   - `--asr local`: 내 PC에서 faster-whisper (large-v3). 무료지만 NVIDIA GPU 권장
 2. **Claude API** 로 앞뒤 문맥·캐릭터 말투를 살려 한국어 번역 — 유료 (아래 비용 참고)
 
 ## 설치 (윈도우 기준)
 
 1. [Python 3.10+](https://www.python.org/downloads/) 설치 (설치할 때 "Add python.exe to PATH" 체크)
-2. 이 폴더에서 명령 프롬프트 열고:
+2. [ffmpeg](https://ffmpeg.org) 설치: `winget install ffmpeg`
+3. 이 폴더에서 명령 프롬프트 열고:
    ```
    pip install -r requirements.txt
    ```
-3. **API 키**: <https://console.anthropic.com> 에서 키 발급 후
+4. **API 키** (명령 프롬프트를 새로 열어야 적용됨)
    ```
-   setx ANTHROPIC_API_KEY "sk-ant-..."
+   setx AI_GATEWAY_API_KEY "..."     ← 받아쓰기 (Vercel 대시보드 → AI Gateway → API Keys)
+   setx ANTHROPIC_API_KEY "sk-ant-..."  ← 번역 (https://console.anthropic.com)
    ```
-   (명령 프롬프트를 새로 열어야 적용됨)
 
+`--asr local` 을 쓸 때만 `pip install faster-whisper` 가 추가로 필요합니다.
 NVIDIA 그래픽카드가 있으면 자동으로 GPU를 씁니다(훨씬 빠름). GPU에서 cuBLAS/cuDNN 오류가 나면
 [faster-whisper 안내](https://github.com/SYSTRAN/faster-whisper#gpu)대로 CUDA 라이브러리를 깔거나, 일단 `--device cpu` 로 돌리세요.
 
@@ -45,20 +50,25 @@ python jp2ko.py "RJ01234567" --context "츤데레 소꿉친구 '아카리'가 �
 # 캐릭터 이름 같은 고유명사를 Whisper가 자꾸 틀리면 힌트로
 python jp2ko.py "RJ01234567" --prompt "あかり、耳かき、お兄ちゃん"
 
-# PC가 느리면 작은 모델 (정확도는 떨어짐)
-python jp2ko.py track01.mp3 --model medium
+# 받아쓰기 모델을 Grok STT 로 (MAI 와 비교해보고 잘 듣는 쪽 쓰기)
+python jp2ko.py track01.mp3 --asr-model grok --no-translate
+
+# 받아쓰기를 내 PC(GPU)에서
+python jp2ko.py track01.mp3 --asr local
 ```
 
 | 옵션 | 설명 |
 |---|---|
 | `--bilingual` | 한국어 아래 일본어 원문 같이 표시 |
 | `--context "..."` | 작품 설명/캐릭터 정보 → 번역 품질 ↑ |
-| `--prompt "..."` | Whisper 받아쓰기 힌트 (일본어로) |
+| `--asr` | 받아쓰기 방식: `vercel`(기본) / `local` |
+| `--asr-model` | `--asr vercel` 모델: `mai`(기본, MAI-Transcribe-2) / `grok` (Grok STT) |
+| `--prompt "..."` | `--asr local` Whisper 받아쓰기 힌트 (일본어로) |
 | `--formats srt,lrc` | 원하는 자막 형식만 |
 | `--no-translate` | 번역 없이 일본어 받아쓰기만 (API 키 불필요) |
 | `--retranslate` | 받아쓰기는 그대로 두고 번역만 다시 (`--context` 바꿨을 때) |
 | `--force` | 캐시 무시하고 처음부터 |
-| `--model` | Whisper 모델: `large-v3`(기본) / `medium` / `small` |
+| `--model` | `--asr local` Whisper 모델: `large-v3`(기본) / `medium` / `small` |
 | `--effort` | 번역 공들이는 정도: `low` / `medium`(기본) / `high` |
 
 받아쓰기 결과는 `*.jp2ko.json` 으로 캐시되므로, 번역만 다시 돌릴 때는 받아쓰기를 반복하지 않습니다.
@@ -72,12 +82,13 @@ python jp2ko.py track01.mp3 --model medium
 
 ## 비용 / 시간 감각
 
-- 받아쓰기: GPU(RTX 3060급)에서 1시간 음성 ≈ 3~6분, CPU 만 있으면 그 몇 배.
+- 받아쓰기 (vercel): 1시간 $0.10 — 무료 크레딧 $5/30일 안에서 해결. 긴 트랙은 무음 지점에서 2분 안팎으로 잘라 보냅니다.
+- 받아쓰기 (local): GPU(RTX 3060급)에서 1시간 음성 ≈ 3~6분, CPU 만 있으면 그 몇 배.
 - 번역: 대사량에 따라 다르지만 1시간 작품에 대략 1달러 안팎 (`--effort low` 로 낮추면 더 저렴).
 
 ## 한계
 
-- 속삭임·바이노럴·효과음이 많으면 Whisper 가 대사를 놓치거나 잘못 듣기도 합니다. 번역 단계에서 문맥으로 어느 정도 보정하지만 완벽하진 않습니다.
+- 속삭임·바이노럴·효과음이 많으면 받아쓰기 모델이 대사를 놓치거나 잘못 듣기도 합니다. 번역 단계에서 문맥으로 어느 정도 보정하지만 완벽하진 않습니다.
 - 무음 구간에서 Whisper 가 지어내는 대표적 문장(`ご視聴ありがとうございました` 등)은 자동으로 걸러냅니다.
 - 번역이 거절되거나 오류가 난 묶음은 일본어 원문 그대로 남기고 다음으로 진행합니다.
 

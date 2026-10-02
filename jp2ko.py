@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """일본어 음성(동인음성/ASMR) → 한국어 자막 생성기.
 
-1) faster-whisper 로 일본어 받아쓰기 (타임스탬프 포함)
+1) 일본어 받아쓰기 (타임스탬프 포함)
+   - --asr vercel : Vercel AI Gateway API (MAI-Transcribe-2 / Grok STT), GPU 불필요
+   - --asr local  : 내 PC 에서 faster-whisper
 2) Claude 로 문맥을 유지하며 한국어 번역
 3) 오디오 파일 옆에 .ko.srt / .ko.vtt / .ko.lrc 저장
 
@@ -9,6 +11,7 @@
     python jp2ko.py "RJ01234567/"                 # 폴더 안 트랙 전부
     python jp2ko.py track01.mp3 --bilingual        # 한국어 + 일본어 원문 같이
     python jp2ko.py track01.mp3 --no-translate     # 일본어 받아쓰기만
+    python jp2ko.py track01.mp3 --asr local        # 받아쓰기를 내 PC(GPU)에서
 """
 
 from __future__ import annotations
@@ -75,6 +78,21 @@ def transcribe(path: Path, model, args) -> list[Segment]:
                 continue
             out.append(Segment(id=len(out), start=start, end=end, ja=text))
             print(f"  [{fmt_lrc(start)}] {text}", flush=True)
+    return out
+
+
+def transcribe_vercel(path: Path, args) -> list[Segment]:
+    import asr_vercel
+
+    out: list[Segment] = []
+
+    def on_line(start: float, end: float, text: str) -> None:
+        if not text or is_hallucination(text):
+            return
+        out.append(Segment(id=len(out), start=start, end=end, ja=text))
+        print(f"  [{fmt_lrc(start)}] {text}", flush=True)
+
+    asr_vercel.transcribe(path, args.asr_model, on_line)
     return out
 
 
@@ -306,7 +324,10 @@ def load_whisper(args):
 def main() -> None:
     ap = argparse.ArgumentParser(description="일본어 음성 → 한국어 자막")
     ap.add_argument("inputs", nargs="+", help="오디오 파일 또는 폴더")
-    ap.add_argument("--model", default="large-v3", help="Whisper 모델 (기본 large-v3, 느린 PC면 medium)")
+    ap.add_argument("--asr", default="vercel", choices=["vercel", "local"],
+                    help="받아쓰기 방식: vercel(API, 기본) / local(내 PC faster-whisper)")
+    ap.add_argument("--asr-model", default="mai", help="--asr vercel 일 때 모델: mai(기본) / grok / 전체 모델 ID")
+    ap.add_argument("--model", default="large-v3", help="--asr local 일 때 Whisper 모델 (기본 large-v3)")
     ap.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"])
     ap.add_argument("--formats", default="srt,vtt,lrc", help="출력 형식, 쉼표 구분 (srt,vtt,lrc)")
     ap.add_argument("--bilingual", action="store_true", help="한국어 아래에 일본어 원문도 표시")
@@ -336,9 +357,12 @@ def main() -> None:
             print(f"  받아쓰기 캐시 사용 ({len(segments)}줄)")
 
         if segments is None:
-            if whisper is None:
-                whisper = load_whisper(args)
-            segments = transcribe(path, whisper, args)
+            if args.asr == "vercel":
+                segments = transcribe_vercel(path, args)
+            else:
+                if whisper is None:
+                    whisper = load_whisper(args)
+                segments = transcribe(path, whisper, args)
             if not segments:
                 print("  대사를 찾지 못했습니다 (무음/효과음 트랙?) — 건너뜀")
                 continue
