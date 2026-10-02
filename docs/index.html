@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>귀자막</title>
+<meta name="theme-color" content="#16131b">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Zen+Kaku+Gothic+New:wght@400;500&display=swap">
+<style>
+/* 밤에 이어폰 끼고 보는 화면: 잉크빛 바탕에 침대맡 스탠드 같은 살구색 한 가지. 한 줄 세로 흐름, 자막 무대가 주인공. */
+:root {
+  --bg: #16131b;
+  --surface: #1f1b26;
+  --raised: #282331;
+  --line: #352f40;
+  --fg: #eee8f2;
+  --muted: #a297b0;
+  --accent: #f2b48e;
+  --accent-ink: #2a1b12;
+  --ok: #8fd1a8;
+  --warn: #f0c96b;
+  --bad: #f08a8a;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-sub: "Gowun Batang", "Nanum Myeongjo", "AppleMyungjo", serif;
+  --font-ja: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 12px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f7f3f6; --surface: #ffffff; --raised: #f0eaf0; --line: #e1d8e2;
+    --fg: #231c2b; --muted: #6d6279; --accent: #b4572b; --accent-ink: #ffffff;
+    --ok: #237a4b; --warn: #8a6410; --bad: #b3372f;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f7f3f6; --surface: #ffffff; --raised: #f0eaf0; --line: #e1d8e2;
+  --fg: #231c2b; --muted: #6d6279; --accent: #b4572b; --accent-ink: #ffffff;
+  --ok: #237a4b; --warn: #8a6410; --bad: #b3372f;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.55 var(--font-ui);
+  padding: env(safe-area-inset-top, 0px) 16px calc(env(safe-area-inset-bottom, 0px) + 32px);
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 20px; padding-block: 16px; }
+header.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font: 700 26px/1.2 var(--font-sub); margin: 0; letter-spacing: -0.01em; }
+h1 small { font: 400 13px var(--font-ui); color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+h2 { font: 600 13px var(--font-ui); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+button, .btn, select, input, textarea { font: inherit; color: inherit; }
+button, .btn {
+  border: 1px solid var(--line); background: var(--raised); border-radius: 999px;
+  padding: 8px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; min-height: 38px;
+}
+button.primary, .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+button.ghost { background: transparent; }
+button, .btn { white-space: nowrap; flex-shrink: 0; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible, li:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+input[type=text], input[type=password], select, textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+}
+textarea { min-height: 84px; resize: vertical; }
+label.f { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+label.f > span b { color: var(--fg); font-weight: 600; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.hint { font-size: 12.5px; color: var(--muted); margin: 0; }
+.hint a { color: var(--accent); }
+
+/* 자막 무대 */
+.stage {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+  padding: 22px 18px 18px; display: grid; gap: 14px; min-width: 0;
+}
+.stage .now { min-height: 7.5em; display: grid; align-content: center; gap: 8px; text-align: center; }
+.stage .prev, .stage .next { font: 15px/1.5 var(--font-sub); color: var(--muted); opacity: .7; min-height: 1.5em; text-align: center; }
+.stage .ko { font: 400 clamp(21px, 5.6vw, 28px)/1.5 var(--font-sub); text-wrap: balance; word-break: keep-all; overflow-wrap: anywhere; }
+.stage .ja { font: 400 15px/1.6 var(--font-ja); color: var(--muted); text-wrap: balance; }
+.stage .empty { color: var(--muted); font: 16px/1.6 var(--font-sub); }
+.media { width: 100%; display: block; border-radius: 12px; background: #000; max-height: 46vh; }
+audio.media { background: transparent; height: 48px; }
+.tag { font: 500 11.5px var(--font-ui); letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.tag.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.tag.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+.tag.demo { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.stagebar { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stagebar .title { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 180px; }
+
+/* 파일 목록 */
+.list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+.item.active { border-color: var(--accent); }
+.item .name { font-weight: 500; overflow-wrap: anywhere; }
+.item .meta { font: 12px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { height: 4px; background: var(--raised); border-radius: 4px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.log { font: 12px/1.5 var(--font-mono); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; max-height: 7.5em; overflow: auto; }
+
+/* 대본 */
+.lines { list-style: none; margin: 0; padding: 0; max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.lines li { display: grid; grid-template-columns: 4.2em 1fr; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.lines li:last-child { border-bottom: 0; }
+.lines li .t { font: 12px var(--font-mono); color: var(--muted); padding-top: 3px; font-variant-numeric: tabular-nums; }
+.lines li .k { font: 16px/1.5 var(--font-sub); min-width: 0; overflow-wrap: anywhere; }
+.lines li .j { font: 13px/1.5 var(--font-ja); color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.lines li.cur { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.lines li.cur .t { color: var(--accent); }
+
+details.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 4px 14px; }
+details.card[open] { padding-bottom: 14px; }
+details.card > summary { cursor: pointer; padding: 10px 0; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary::after { content: "펼치기"; font: 400 12px var(--font-ui); color: var(--muted); }
+details.card[open] > summary::after { content: "접기"; }
+.form { display: grid; gap: 12px; }
+.grid2 { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; max-width: calc(100% - 32px); z-index: 9; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>귀자막<small>일본어 음성 → 한국어 자막</small></h1>
+    <div class="row">
+      <label class="btn primary" for="pick">파일 열기</label>
+      <input id="pick" class="sr" type="file" accept="audio/*,video/*,.wav,.mp3,.flac,.m4a,.ogg,.opus,.mp4,.mkv,.webm" multiple>
+    </div>
+  </header>
+
+  <section class="stage" aria-live="polite">
+    <div class="stagebar">
+      <span class="title" id="nowTitle">재생 중인 파일 없음</span>
+      <div class="row">
+        <span class="tag demo" id="demoTag">예시 자막</span>
+        <button class="ghost" id="toggleJa" aria-pressed="true">원문 표시</button>
+      </div>
+    </div>
+    <div id="mediaBox"></div>
+    <div class="prev" id="subPrev"></div>
+    <div class="now" id="subNow"></div>
+    <div class="next" id="subNext"></div>
+  </section>
+
+  <section>
+    <h2>열어둔 파일</h2>
+    <ul class="list" id="opened"></ul>
+    <p class="hint" id="openedHint">파일을 열면 같은 이름·크기로 저장된 자막을 자동으로 찾아 붙입니다. 파일 자체는 어디에도 저장되지 않으니 들을 때마다 다시 열어 주세요.</p>
+  </section>
+
+  <section>
+    <h2>대사</h2>
+    <ol class="lines" id="lines"></ol>
+  </section>
+
+  <details class="card" id="workCard" open>
+    <summary>작품 정보 (번역 품질용)</summary>
+    <div class="form">
+      <label class="f"><span>캐릭터 이름, 청자와의 관계, 말투, 상황을 적어 두면 호칭과 말투가 자연스러워집니다.</span>
+        <textarea id="context" placeholder="예) 의붓여동생 '미나세 코토(水瀬琴)'. 평소엔 무뚝뚝한 반말(츤데레)이지만 오빠를 좋아함. 청자를 '兄さん' → '오빠'로."></textarea>
+      </label>
+    </div>
+  </details>
+
+  <details class="card" id="setCard">
+    <summary>설정</summary>
+    <div class="form">
+      <label class="f"><span><b>Vercel AI Gateway API 키</b> — 이 기기 브라우저에만 저장됩니다</span>
+        <div class="row" style="flex-wrap:nowrap">
+          <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="vck_...">
+          <button class="ghost" id="showKey" type="button">보기</button>
+        </div>
+      </label>
+      <div class="grid2">
+        <label class="f"><span><b>받아쓰기 모델</b></span>
+          <select id="asrModel">
+            <option value="microsoft/mai-transcribe-2">MAI-Transcribe-2 · 시간당 $0.10</option>
+            <option value="spacexai/grok-stt">Grok STT · 시간당 $0.10</option>
+          </select>
+        </label>
+        <label class="f"><span><b>번역 모델</b></span>
+          <select id="trModel">
+            <option value="anthropic/claude-opus-5.5">Claude Opus 5.5 · 품질 우선</option>
+            <option value="anthropic/claude-sonnet-5.5">Claude Sonnet 5.5 · 절반 가격</option>
+            <option value="custom">직접 입력</option>
+          </select>
+        </label>
+      </div>
+      <label class="f" id="customWrap" hidden><span>번역 모델 ID (AI Gateway 표기)</span>
+        <input id="trCustom" type="text" spellcheck="false" placeholder="예) deepseek/deepseek-v4-pro">
+      </label>
+      <label class="f"><span><b>번역 공들이기</b> (Claude 전용)</span>
+        <select id="effort">
+          <option value="low">낮음 · 싸고 빠름</option>
+          <option value="medium" selected>보통</option>
+          <option value="high">높음</option>
+        </select>
+      </label>
+      <p class="hint">Vercel 무료 크레딧은 30일마다 $5입니다. 크레딧을 직접 구매하면 무료 지급이 멈춥니다. 키는 <a href="https://vercel.com/ai-gateway" target="_blank" rel="noopener">vercel.com/ai-gateway</a> → API Keys 에서 만듭니다.</p>
+      <p class="hint" id="usage"></p>
+    </div>
+  </details>
+
+  <details class="card" id="libCard">
+    <summary>저장된 자막</summary>
+    <ul class="list" id="library"></ul>
+  </details>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+"use strict";
+const GATEWAY = "https://ai-gateway.vercel.sh";
+const SR = 16000;                 // 받아쓰기로 보내는 샘플레이트
+const CHUNK_MIN = 40, CHUNK_TARGET = 60, CHUNK_MAX = 75;    // 초. 16kHz WAV 75초 ≈ 2.4MB
+const TR_BATCH = 60, TR_CONTEXT = 8;
+const HALLUCINATIONS = ["ご視聴ありがとうございました", "ご清聴ありがとうございました", "チャンネル登録", "最後までご視聴"];
+const PRICES = { "anthropic/claude-opus-5.5": [4, 20], "anthropic/claude-sonnet-5.5": [2, 10] }; // $/1M 토큰
+
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => (t.hidden = true), 2600); }
+function fmtTime(s) { s = Math.max(0, s); const m = Math.floor(s / 60), x = Math.floor(s % 60); return `${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}`; }
+function fmtSize(b) { return b > 1e9 ? (b / 1e9).toFixed(2) + " GB" : (b / 1e6).toFixed(1) + " MB"; }
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+/* ---------------- 설정 (localStorage) ---------------- */
+const store = {
+  get(k, d = "") { try { const v = localStorage.getItem("gj." + k); return v === null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("gj." + k, v); } catch {} },
+};
+function bindSetting(id, key, ev = "change") {
+  const el = $(id); el.value = store.get(key, el.value);
+  el.addEventListener(ev, () => store.set(key, el.value));
+}
+bindSetting("apiKey", "key", "input");
+bindSetting("asrModel", "asr");
+bindSetting("trModel", "tr");
+bindSetting("trCustom", "trCustom", "input");
+bindSetting("effort", "effort");
+bindSetting("context", "context", "input");
+const syncCustom = () => ($("customWrap").hidden = $("trModel").value !== "custom");
+$("trModel").addEventListener("change", syncCustom); syncCustom();
+$("showKey").onclick = () => { const k = $("apiKey"); const show = k.type === "password"; k.type = show ? "text" : "password"; $("showKey").textContent = show ? "숨기기" : "보기"; };
+if (!store.get("key")) $("setCard").open = true;
+const trModel = () => ($("trModel").value === "custom" ? $("trCustom").value.trim() : $("trModel").value);
+
+/* ---------------- 자막 저장소 (IndexedDB) ---------------- */
+const db = (() => {
+  let p, mem = new Map();
+  const open = () => p ||= new Promise((res) => {
+    try {
+      const r = indexedDB.open("gwijamak", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("subs", { keyPath: "key" });
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => res(null);
+    } catch { res(null); }
+  });
+  const tx = async (mode, fn) => {
+    const d = await open();
+    if (!d) { const r = fn(null); return r && r.result; }
+    return new Promise((res, rej) => {
+      const t = d.transaction("subs", mode); const s = t.objectStore("subs");
+      const r = fn(s); t.oncomplete = () => res(r && r.result); t.onerror = () => rej(t.error);
+    });
+  };
+  return {
+    get: (k) => tx("readonly", (s) => (s ? s.get(k) : { result: mem.get(k) })),
+    put: (v) => (v.updatedAt = Date.now(), tx("readwrite", (s) => (s ? s.put(v) : (mem.set(v.key, v), null)))),
+    del: (k) => tx("readwrite", (s) => (s ? s.delete(k) : (mem.delete(k), null))),
+    all: () => tx("readonly", (s) => (s ? s.getAll() : { result: [...mem.values()] })),
+  };
+})();
+const keyOf = (f) => `${f.name}@${f.size}`;
+
+/* ---------------- 오디오 읽기: WAV 는 필요한 부분만, 나머지는 통째로 디코드 ---------------- */
+async function wavSource(file) {
+  const head = new DataView(await file.slice(0, 12).arrayBuffer());
+  const tag = (dv, o) => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+  if (tag(head, 0) !== "RIFF" || tag(head, 8) !== "WAVE") return null;
+  let off = 12, fmt = null, dataOff = 0, dataLen = 0;
+  while (off + 8 <= file.size) {
+    const h = new DataView(await file.slice(off, off + 8).arrayBuffer());
+    const id = tag(h, 0), len = h.getUint32(4, true);
+    if (id === "fmt ") {
+      const f = new DataView(await file.slice(off + 8, off + 8 + Math.min(len, 40)).arrayBuffer());
+      let format = f.getUint16(0, true);
+      if (format === 0xfffe && len >= 26) format = f.getUint16(24, true);
+      fmt = { format, ch: f.getUint16(2, true), rate: f.getUint32(4, true), align: f.getUint16(12, true), bits: f.getUint16(14, true) };
+    } else if (id === "data") {
+      dataOff = off + 8; dataLen = Math.min(len || file.size - dataOff, file.size - dataOff); break;
+    }
+    off += 8 + len + (len & 1);
+  }
+  if (!fmt || !dataOff || ![1, 3].includes(fmt.format)) return null;
+  const frames = Math.floor(dataLen / fmt.align);
+  const duration = frames / fmt.rate;
+  async function read(t0, t1) {
+    const f0 = Math.max(0, Math.floor(t0 * fmt.rate)), f1 = Math.min(frames, Math.ceil(t1 * fmt.rate));
+    const buf = await file.slice(dataOff + f0 * fmt.align, dataOff + f1 * fmt.align).arrayBuffer();
+    const dv = new DataView(buf), n = f1 - f0, bps = fmt.bits / 8, mono = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let acc = 0;
+      for (let c = 0; c < fmt.ch; c++) {
+        const o = i * fmt.align + c * bps;
+        let v;
+        if (fmt.format === 3) v = bps === 8 ? dv.getFloat64(o, true) : dv.getFloat32(o, true);
+        else if (bps === 2) v = dv.getInt16(o, true) / 32768;
+        else if (bps === 3) { let x = dv.getUint8(o) | (dv.getUint8(o + 1) << 8) | (dv.getInt8(o + 2) << 16); v = x / 8388608; }
+        else if (bps === 4) v = dv.getInt32(o, true) / 2147483648;
+        else v = (dv.getUint8(o) - 128) / 128;
+        acc += v;
+      }
+      mono[i] = acc / fmt.ch;
+    }
+    return resample(mono, fmt.rate);
+  }
+  return { duration, read };
+}
+function resample(x, rate) {
+  if (rate === SR) return x;
+  const ratio = rate / SR, n = Math.floor(x.length / ratio), out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {           // 구간 평균 = 간단한 저역 통과 + 다운샘플
+    const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio));
+    let s = 0; for (let j = a; j < b; j++) s += x[j]; out[i] = s / (b - a);
+  }
+  return out;
+}
+async function decodedSource(file) {
+  const ctx = new OfflineAudioContext(1, 1, SR);
+  const ab = await file.arrayBuffer();
+  const audio = await ctx.decodeAudioData(ab);   // SR 로 리샘플되어 나옴
+  let mono = audio.getChannelData(0);
+  if (audio.numberOfChannels > 1) {
+    mono = new Float32Array(audio.length);
+    for (let c = 0; c < audio.numberOfChannels; c++) { const d = audio.getChannelData(c); for (let i = 0; i < d.length; i++) mono[i] += d[i] / audio.numberOfChannels; }
+  }
+  return { duration: audio.duration, read: async (t0, t1) => mono.slice(Math.floor(t0 * SR), Math.ceil(t1 * SR)) };
+}
+async function audioSource(file) {
+  return (await wavSource(file).catch(() => null)) || decodedSource(file);
+}
+
+/* 무음 지점 찾기: 50ms 프레임 에너지를 0.5초로 평균내서 가장 조용한 곳 */
+function quietestCut(pcm, minSec) {
+  const F = SR / 20, nF = Math.floor(pcm.length / F); if (nF < 20) return pcm.length;
+  const e = new Float32Array(nF);
+  for (let k = 0; k < nF; k++) { let s = 0; for (let i = k * F; i < (k + 1) * F; i++) s += pcm[i] * pcm[i]; e[k] = s / F; }
+  const W = 10, from = Math.floor(minSec * 20); let best = -1, bestScore = Infinity, run = 0;
+  for (let k = 0; k < nF; k++) {
+    run += e[k]; if (k >= W) run -= e[k - W];
+    if (k >= from && k >= W) {
+      const center = k - W / 2, dist = Math.abs(center / 20 - CHUNK_TARGET) / 60;
+      const score = (run / W) * (1 + 0.3 * dist);
+      if (score < bestScore) { bestScore = score; best = center; }
+    }
+  }
+  return best < 0 ? pcm.length : Math.floor(best * F);
+}
+function wavBlob(pcm) {
+  const buf = new ArrayBuffer(44 + pcm.length * 2), dv = new DataView(buf);
+  const w = (o, s) => [...s].forEach((c, i) => dv.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); dv.setUint32(4, 36 + pcm.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, SR, true);
+  dv.setUint32(28, SR * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, "data"); dv.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) dv.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 32767, true);
+  return new Blob([buf], { type: "audio/wav" });
+}
+const blobToB64 = (b) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(b); });
+
+/* ---------------- API ---------------- */
+class ApiError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
+async function gatewayFetch(path, headers, body) {
+  const key = $("apiKey").value.trim();
+  if (!key) throw new ApiError(0, "설정에서 Vercel AI Gateway API 키를 넣어 주세요.");
+  for (let attempt = 0; ; attempt++) {
+    let r;
+    try {
+      r = await fetch(GATEWAY + path, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+    } catch (e) {
+      if (attempt < 3) { await sleep(2000 * 2 ** attempt); continue; }
+      throw new ApiError(0, "네트워크 오류로 요청을 보내지 못했습니다.");
+    }
+    if (r.ok) return r.json();
+    const text = await r.text().catch(() => "");
+    let msg = text; try { msg = JSON.parse(text).error?.message || text; } catch {}
+    if ([429, 500, 502, 503, 504, 529].includes(r.status) && attempt < 3) { await sleep(2000 * 2 ** attempt); continue; }
+    if (r.status === 401 || r.status === 403) throw new ApiError(r.status, "API 키가 거부됐습니다. 설정에서 키를 확인해 주세요.");
+    if (r.status === 402) throw new ApiError(r.status, "Vercel 크레딧이 부족합니다. 다음 무료 지급을 기다리거나 크레딧을 확인해 주세요.");
+    throw new ApiError(r.status, `오류 ${r.status}: ${String(msg).slice(0, 200)}`);
+  }
+}
+
+let useMp3 = false;   // 서버가 요청이 너무 크다고 하면 그때부터 MP3 로 줄여서 보냄
+function loadLame() {
+  return loadLame.p ||= new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js";
+    s.onload = () => res(window.lamejs); s.onerror = () => rej(new Error("MP3 인코더를 불러오지 못했습니다."));
+    document.head.appendChild(s);
+  });
+}
+async function mp3Blob(pcm) {
+  const lame = await loadLame(), enc = new lame.Mp3Encoder(1, SR, 48), out = [];
+  const i16 = new Int16Array(pcm.length);
+  for (let i = 0; i < pcm.length; i++) i16[i] = Math.max(-1, Math.min(1, pcm[i])) * 32767;
+  for (let i = 0; i < i16.length; i += 1152) {
+    const b = enc.encodeBuffer(i16.subarray(i, i + 1152)); if (b.length) out.push(new Uint8Array(b));
+    if (i % (1152 * 200) === 0) await sleep(0);   // 화면이 멈추지 않게
+  }
+  out.push(new Uint8Array(enc.flush()));
+  return new Blob(out, { type: "audio/mpeg" });
+}
+async function transcribeChunk(pcm, model) {
+  try { return await transcribeOnce(pcm, model); }
+  catch (e) {
+    if (useMp3 || e.status !== 413) throw e;
+    useMp3 = true; return transcribeOnce(pcm, model);
+  }
+}
+async function transcribeOnce(pcm, model) {
+  const blob = useMp3 ? await mp3Blob(pcm) : wavBlob(pcm);
+  const audio = await blobToB64(blob);
+  const headers = { "ai-gateway-protocol-version": "0.0.1", "ai-model-id": model };
+  const body = { audio, mediaType: blob.type };
+  if (model.startsWith("microsoft/")) {
+    try { return await gatewayFetch("/v4/ai/transcription-model", headers, { ...body, providerOptions: { azure: { locales: ["ja-JP"] } } }); }
+    catch (e) { if (e.status !== 400) throw e; }   // 옵션을 거부하면 옵션 없이 다시
+  }
+  return gatewayFetch("/v4/ai/transcription-model", headers, body);
+}
+
+const SENT = /[^。！？!?…♪]+[。！？!?…♪]*|[。！？!?…♪]+/g;
+function splitSentences(s, e, text) {
+  const parts = (text.match(SENT) || []).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return [{ s, e, ja: text.trim(), ko: "" }];
+  const total = parts.reduce((a, p) => a + p.length, 0); let t = s;
+  return parts.map((p) => { const d = (e - s) * p.length / total; const o = { s: t, e: t + d, ja: p, ko: "" }; t += d; return o; });
+}
+function resultToLines(res, offset, len) {
+  const segs = res.segments || [], out = [];
+  if (segs.length) {
+    for (const g of segs) {
+      const text = (g.text || "").trim(); if (!text) continue;
+      const s = Number(g.startSecond ?? g.start ?? 0), e = Number(g.endSecond ?? g.end ?? s);
+      out.push(...splitSentences(offset + s, offset + e, text));
+    }
+  } else if ((res.text || "").trim()) {
+    out.push(...splitSentences(offset, offset + len, res.text));
+  }
+  return out.filter((l) => !(HALLUCINATIONS.some((h) => l.ja.includes(h)) || (l.ja.length > 30 && new Set(l.ja).size <= 3)));
+}
+
+const SYSTEM_PROMPT = `당신은 일본 동인음성(ASMR, 음성 드라마) 전문 일→한 번역가입니다.
+성인 청취자가 자기가 구매한 작품을 이해하려고 쓰는 자막이며, 작품은 허구이고 등장인물은 모두 성인입니다.
+
+번역 규칙:
+- 원문의 의미, 감정, 뉘앙스를 충실하게 옮긴다. 수위 높은 표현도 순화하거나 빼지 않는다.
+- 캐릭터 말투를 살린다: 반말/존댓말, 무뚝뚝함, 장난스러움, 수줍음 등 캐릭터성.
+- 청자를 부르는 호칭(兄さん, お兄ちゃん, 先輩, ご主人様 등)은 한국어로 자연스러운 호칭(오빠, 선배, 주인님 등)으로.
+- 의성어·의태어·숨소리(はぁ, んっ, ちゅっ 등)는 한국어 자막에서 자연스러운 표기로.
+- 받아쓰기(음성인식) 결과라 오탈자·잘못 들은 단어가 있을 수 있다. 앞뒤 문맥으로 원래 의도를 추정해서 번역한다.
+- 각 줄은 자막 한 줄이다. 줄을 합치거나 나누지 말고, 입력된 모든 id 에 대해 정확히 하나씩 번역을 낸다.
+- 번역문만 쓴다. 설명이나 역주는 붙이지 않는다.
+- 출력은 {"lines":[{"id":번호,"ko":"번역"}]} 형태의 JSON 하나.`;
+const OUTPUT_SCHEMA = { type: "object", properties: { lines: { type: "array", items: { type: "object", properties: { id: { type: "integer" }, ko: { type: "string" } }, required: ["id", "ko"], additionalProperties: false } } }, required: ["lines"], additionalProperties: false };
+
+function buildPrompt(batch, prev, context) {
+  const parts = [];
+  if (context) parts.push(`<작품정보>\n${context}\n</작품정보>`);
+  if (prev.length) parts.push(`<직전_대사_참고용>\n${prev.map((l) => `${l.ja}  =>  ${l.ko}`).join("\n")}\n</직전_대사_참고용>`);
+  parts.push(`<번역할_대사>\n${batch.map((l) => JSON.stringify({ id: l.id, ja: l.ja })).join("\n")}\n</번역할_대사>`);
+  parts.push("위 <번역할_대사> 의 각 줄을 한국어로 번역하세요.");
+  return parts.join("\n\n");
+}
+const usage = { in: 0, out: 0, cost: 0 };
+function addUsage(model, u) {
+  if (!u) return;
+  usage.in += u.input_tokens || 0; usage.out += u.output_tokens || 0;
+  const p = PRICES[model]; if (p) usage.cost += ((u.input_tokens || 0) * p[0] + (u.output_tokens || 0) * p[1]) / 1e6;
+  $("usage").textContent = `이번 접속 번역 사용량: 입력 ${usage.in.toLocaleString()} · 출력 ${usage.out.toLocaleString()} 토큰${usage.cost ? ` · 약 $${usage.cost.toFixed(3)}` : ""}`;
+}
+async function translateBatch(batch, prev, context) {
+  const model = trModel();
+  if (!model) throw new ApiError(0, "설정에서 번역 모델 ID 를 입력해 주세요.");
+  const base = { model, max_tokens: 16000, system: SYSTEM_PROMPT, messages: [{ role: "user", content: buildPrompt(batch, prev, context) }] };
+  const variants = [
+    { ...base, output_config: { effort: $("effort").value, format: { type: "json_schema", schema: OUTPUT_SCHEMA } } },
+    { ...base, output_config: { format: { type: "json_schema", schema: OUTPUT_SCHEMA } } },
+    base,
+  ];
+  let res;
+  for (let i = 0; i < variants.length; i++) {
+    try { res = await gatewayFetch("/v1/messages", { "anthropic-version": "2023-06-01" }, variants[i]); break; }
+    catch (e) { if (e.status !== 400 || i === variants.length - 1) throw e; }   // 모델이 옵션을 모르면 단순한 요청으로
+  }
+  addUsage(model, res.usage);
+  if (res.stop_reason === "refusal") return { refused: true, map: new Map() };
+  const text = (res.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+  const m = text.match(/\{[\s\S]*\}/);
+  try {
+    const data = JSON.parse(m ? m[0] : text);
+    return { refused: false, map: new Map((data.lines || []).map((l) => [Number(l.id), String(l.ko || "").trim()])) };
+  } catch { return { refused: false, map: new Map(), bad: true }; }
+}
+
+/* ---------------- 작업 (받아쓰기 → 번역, 중간 저장) ---------------- */
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && !wakeLock && "wakeLock" in navigator) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => (wakeLock = null)); }
+    if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch {}
+}
+const jobs = new Map();   // key -> {progress, log, running}
+
+async function runJob(entry, { retranslate = false } = {}) {
+  const key = entry.key; if (jobs.get(key)?.running) return;
+  const job = { running: true, progress: 0, log: "" }; jobs.set(key, job);
+  const say = (m) => { job.log = m; renderOpened(); };
+  keepAwake(true);
+  try {
+    let rec = (await db.get(key)) || { key, name: entry.file.name, size: entry.file.size, createdAt: Date.now(), lines: [], asrDoneUntil: 0, duration: 0 };
+    rec.context = $("context").value.trim();
+    entry.rec = rec;
+    if (retranslate) rec.lines.forEach((l) => { l.ko = ""; l.failed = false; });
+
+    if (!rec.asrDone) {
+      say("오디오 읽는 중…");
+      const src = await audioSource(entry.file);
+      rec.duration = src.duration; rec.asrModel = rec.asrModel || $("asrModel").value;
+      let t = rec.asrDoneUntil || 0;
+      while (t < src.duration - 0.3) {
+        const end = Math.min(src.duration, t + CHUNK_MAX);
+        const pcm = await src.read(t, end);
+        const cut = end >= src.duration ? pcm.length : quietestCut(pcm, CHUNK_MIN);
+        const piece = pcm.subarray(0, cut), len = piece.length / SR;
+        say(`받아쓰기 ${fmtTime(t)} – ${fmtTime(t + len)} / ${fmtTime(src.duration)}`);
+        const res = await transcribeChunk(piece, rec.asrModel);
+        rec.lines.push(...resultToLines(res, t, len));
+        t += len; rec.asrDoneUntil = t;
+        job.progress = 0.5 * (t / src.duration);
+        await db.put(rec);  // 조각마다 저장 → 탭이 죽어도 이어서 가능
+      }
+      rec.lines.sort((a, b) => a.s - b.s); rec.lines.forEach((l, i) => (l.id = i));
+      rec.asrDone = true; await db.put(rec);
+    }
+
+    rec.lines.forEach((l, i) => (l.id = i));
+    const todo = rec.lines.filter((l) => !l.ko || l.failed);
+    let done = rec.lines.length - todo.length, refusedCount = 0;
+    for (let i = 0; i < todo.length; i += TR_BATCH) {
+      const batch = todo.slice(i, i + TR_BATCH);
+      const firstIdx = batch[0].id;
+      const prev = rec.lines.slice(Math.max(0, firstIdx - TR_CONTEXT), firstIdx).filter((l) => l.ko);
+      say(`번역 ${done + 1}–${done + batch.length} / ${rec.lines.length}줄`);
+      const { refused, map, bad } = await translateBatch(batch, prev, rec.context);
+      if (refused) refusedCount += batch.length;
+      // 빠지거나 거절된 줄은 원문을 넣어 두고 failed 로 표시 → '이어서 만들기'로 다시 번역
+      for (const l of batch) { const ko = map.get(l.id); l.ko = ko || l.ja; l.failed = !ko; }
+      if (bad) say("번역 결과를 읽지 못한 묶음이 있어 원문으로 남겼습니다.");
+      done += batch.length; job.progress = 0.5 + 0.5 * (done / rec.lines.length);
+      await db.put(rec);
+      if (current?.key === key) { current.rec = rec; renderLines(); }
+    }
+    rec.done = !rec.lines.some((l) => l.failed); await db.put(rec);
+    job.progress = 1;
+    say(refusedCount ? `완료 · ${refusedCount}줄은 번역이 거절되어 원문으로 남김` : `완료 · ${rec.lines.length}줄`);
+    entry.rec = rec;
+    if (current?.key === key) { current.rec = rec; renderLines(); }
+    renderLibrary();
+  } catch (e) {
+    say((e && e.message) || String(e));
+    toast("중단됨 — 다시 누르면 이어서 진행합니다");
+  } finally {
+    job.running = false; renderOpened(); keepAwake(false);
+  }
+}
+
+/* ---------------- 열어둔 파일 / 플레이어 ---------------- */
+const opened = [];   // {key, file, rec}
+let current = null;  // {key, file, rec, el}
+let showJa = store.get("showJa", "1") === "1";
+
+$("pick").addEventListener("change", async (ev) => {
+  for (const file of ev.target.files) {
+    const key = keyOf(file);
+    if (opened.some((o) => o.key === key)) continue;
+    opened.push({ key, file, rec: await db.get(key) });
+  }
+  ev.target.value = "";
+  renderOpened();
+  if (!current && opened.length) play(opened[0]);
+});
+
+function statusOf(o) {
+  const j = jobs.get(o.key);
+  if (j?.running) return ["warn", `진행 중 ${Math.round(j.progress * 100)}%`];
+  if (o.rec?.done) return ["ok", `자막 ${o.rec.lines.length}줄`];
+  if (o.rec?.lines?.length) return ["warn", "중간까지 저장됨"];
+  if (o.rec?.linkedFrom) return ["ok", "연결된 자막"];
+  return ["", "자막 없음"];
+}
+function renderOpened() {
+  const ul = $("opened"); ul.innerHTML = "";
+  $("openedHint").hidden = opened.length > 0;
+  for (const o of opened) {
+    const j = jobs.get(o.key), [cls, label] = statusOf(o);
+    const li = document.createElement("li");
+    li.className = "item" + (current?.key === o.key ? " active" : "");
+    const hasSubs = o.rec?.lines?.length;
+    li.innerHTML = `
+      <div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:10px">
+        <span class="name">${esc(o.file.name)}</span><span class="tag ${cls}">${label}</span>
+      </div>
+      <div class="meta">${fmtSize(o.file.size)}${o.rec?.duration ? " · " + fmtTime(o.rec.duration) : ""}</div>
+      ${j?.running || (j && j.progress < 1) ? `<div class="bar"><i style="width:${Math.round((j.progress || 0) * 100)}%"></i></div>` : ""}
+      ${j?.log ? `<p class="log">${esc(j.log)}</p>` : ""}
+      <div class="row">
+        <button data-act="play">재생</button>
+        <button class="primary" data-act="make" ${j?.running ? "disabled" : ""}>${o.rec?.done ? "다시 만들기" : o.rec?.lines?.length ? "이어서 만들기" : "자막 만들기"}</button>
+        ${o.rec?.asrDone ? `<button data-act="retr" ${j?.running ? "disabled" : ""}>번역만 다시</button>` : ""}
+        <button class="ghost" data-act="link">다른 자막 연결</button>
+        ${hasSubs ? `<button class="ghost" data-act="export">내보내기</button>` : ""}
+      </div>
+      <div data-slot></div>`;
+    li.querySelector('[data-act="play"]').onclick = () => play(o);
+    li.querySelector('[data-act="make"]').onclick = async () => {
+      if (o.rec?.done) { o.rec = null; await db.del(o.key); }
+      runJob(o);
+    };
+    li.querySelector('[data-act="retr"]')?.addEventListener("click", () => runJob(o, { retranslate: true }));
+    li.querySelector('[data-act="link"]').onclick = () => showLinker(o, li.querySelector("[data-slot]"));
+    li.querySelector('[data-act="export"]')?.addEventListener("click", () => showExporter(o.rec, li.querySelector("[data-slot]")));
+    ul.appendChild(li);
+  }
+}
+
+/* 효과음 있음/없음 버전처럼 길이가 같은 파일에 기존 자막을 붙이기 */
+async function showLinker(o, slot) {
+  const all = (await db.all()).filter((r) => r.key !== o.key && r.lines?.length);
+  if (!all.length) { slot.innerHTML = `<p class="hint">연결할 저장된 자막이 없습니다.</p>`; return; }
+  slot.innerHTML = `<div class="row" style="flex-wrap:nowrap"><select aria-label="연결할 자막">${all.map((r, i) => `<option value="${i}">${esc(r.name)} (${r.lines.length}줄)</option>`).join("")}</select><button class="primary">연결</button></div>
+    <p class="hint">BGM·효과음 있는 버전과 없는 버전처럼 타이밍이 같은 파일에 씁니다.</p>`;
+  slot.querySelector("button").onclick = async () => {
+    const src = all[Number(slot.querySelector("select").value)];
+    const rec = { ...structuredClone(src), key: o.key, name: o.file.name, size: o.file.size, linkedFrom: src.key, createdAt: Date.now() };
+    await db.put(rec); o.rec = rec; renderOpened(); renderLibrary();
+    if (current?.key === o.key) { current.rec = rec; renderLines(); }
+    toast("자막을 연결했습니다");
+  };
+}
+
+function play(o) {
+  if (current?.url) URL.revokeObjectURL(current.url);
+  const isVideo = /^video\//.test(o.file.type) || /\.(mp4|mkv|webm|mov)$/i.test(o.file.name);
+  const el = document.createElement(isVideo ? "video" : "audio");
+  el.className = "media"; el.controls = true; el.preload = "metadata"; el.playsInline = true;
+  const url = URL.createObjectURL(o.file); el.src = url;
+  el.addEventListener("play", () => { keepAwake(true); tick(); });
+  el.addEventListener("pause", () => { if (![...jobs.values()].some((j) => j.running)) keepAwake(false); });
+  el.addEventListener("seeked", () => updateSub(true));
+  el.addEventListener("timeupdate", () => updateSub(false));   // 화면이 꺼져 rAF 가 멈춰도 따라가게
+  $("mediaBox").replaceChildren(el);
+  current = { key: o.key, file: o.file, rec: o.rec, el, url, idx: -2 };
+  $("nowTitle").textContent = o.file.name;
+  $("demoTag").hidden = true;
+  renderOpened(); renderLines(); updateSub(true);
+}
+
+function lineAt(lines, t) {
+  let lo = 0, hi = lines.length - 1, ans = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (lines[m].s <= t) { ans = m; lo = m + 1; } else hi = m - 1; }
+  return ans;
+}
+function setStage(prev, now, next, emptyMsg) {
+  $("subPrev").textContent = prev ? prev.ko || prev.ja : "";
+  $("subNext").textContent = next ? next.ko || next.ja : "";
+  const box = $("subNow");
+  if (now) {
+    box.innerHTML = `<div class="ko">${esc(now.ko || now.ja)}</div>${showJa && now.ko && now.ko !== now.ja ? `<div class="ja">${esc(now.ja)}</div>` : ""}`;
+  } else box.innerHTML = `<div class="empty">${esc(emptyMsg || "")}</div>`;
+}
+function updateSub(force) {
+  if (!current) return;
+  const lines = current.rec?.lines || [];
+  if (!lines.length) { setStage(null, null, null, current.rec ? "자막을 만드는 중입니다" : "아직 자막이 없습니다. ‘자막 만들기’를 누르세요."); return; }
+  const t = current.el.currentTime, i = lineAt(lines, t);
+  const live = i >= 0 && t <= lines[i].e + 1.2 ? i : -1;     // 대사가 끝나고 1.2초 뒤엔 비우기
+  if (!force && live === current.idx) return;
+  current.idx = live;
+  if (live >= 0) setStage(lines[live - 1], lines[live], lines[live + 1]);
+  else setStage(lines[i] || null, null, lines[i + 1] || null, "");
+  const ol = $("lines");
+  ol.querySelector(".cur")?.classList.remove("cur");
+  const li = ol.children[live]; if (li) { li.classList.add("cur"); if (!ol.matches(":hover")) li.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }
+}
+function tick() { if (!current || current.el.paused) return; updateSub(false); requestAnimationFrame(tick); }
+
+function renderLines(lines = current?.rec?.lines || []) {
+  const ol = $("lines"); ol.innerHTML = "";
+  if (!lines.length) { ol.innerHTML = `<li><span class="t">--:--</span><span class="k" style="color:var(--muted)">자막이 생기면 여기에 대사 전체가 나옵니다. 줄을 누르면 그 위치로 이동합니다.</span></li>`; return; }
+  const frag = document.createDocumentFragment();
+  lines.forEach((l) => {
+    const li = document.createElement("li"); li.tabIndex = 0;
+    li.innerHTML = `<span class="t">${fmtTime(l.s)}</span><div style="min-width:0"><div class="k">${esc(l.ko || l.ja)}</div>${showJa && l.ko && l.ko !== l.ja ? `<div class="j">${esc(l.ja)}</div>` : ""}</div>`;
+    const seek = () => { if (current?.el) { current.el.currentTime = l.s + 0.01; current.el.play().catch(() => {}); } };
+    li.onclick = seek; li.onkeydown = (e) => { if (e.key === "Enter") seek(); };
+    frag.appendChild(li);
+  });
+  ol.appendChild(frag);
+  if (current) { current.idx = -2; updateSub(true); }
+}
+$("toggleJa").setAttribute("aria-pressed", String(showJa));
+$("toggleJa").textContent = showJa ? "원문 표시" : "원문 숨김";
+$("toggleJa").onclick = () => {
+  showJa = !showJa; store.set("showJa", showJa ? "1" : "0");
+  $("toggleJa").setAttribute("aria-pressed", String(showJa));
+$("toggleJa").textContent = showJa ? "원문 표시" : "원문 숨김";
+  $("toggleJa").textContent = showJa ? "원문 표시" : "원문 숨김";
+  if (current) renderLines(); else renderDemo();
+};
+
+/* ---------------- 내보내기 / 저장된 자막 ---------------- */
+const pad = (n, w = 2) => String(n).padStart(w, "0");
+const srtTime = (t) => { const ms = Math.round(t * 1000); return `${pad(Math.floor(ms / 3600000))}:${pad(Math.floor(ms / 60000) % 60)}:${pad(Math.floor(ms / 1000) % 60)},${pad(ms % 1000, 3)}`; };
+const lrcTime = (t) => { const cs = Math.round(t * 100); return `${pad(Math.floor(cs / 6000))}:${pad(Math.floor(cs / 100) % 60)}.${pad(cs % 100)}`; };
+function subText(l, both) { return both && l.ko && l.ko !== l.ja ? [l.ko, l.ja] : [l.ko || l.ja]; }
+function toSrt(lines, both) { return lines.map((l, i) => `${i + 1}\n${srtTime(l.s)} --> ${srtTime(l.e)}\n${subText(l, both).join("\n")}`).join("\n\n") + "\n"; }
+function toVtt(lines, both) { return "WEBVTT\n\n" + lines.map((l) => `${srtTime(l.s).replace(",", ".")} --> ${srtTime(l.e).replace(",", ".")}\n${subText(l, both).join("\n")}`).join("\n\n") + "\n"; }
+function toLrc(lines, both) { return lines.flatMap((l) => [`[${lrcTime(l.s)}]${subText(l, both).join(" / ")}`, `[${lrcTime(l.e)}]`]).join("\n") + "\n"; }
+function download(name, text) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + text], { type: "text/plain;charset=utf-8" }));
+  a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function showExporter(rec, slot) {
+  if (!rec?.lines?.length) return;
+  const base = rec.name.replace(/\.[^.]+$/, "");
+  slot.innerHTML = `<div class="row"><label class="row" style="gap:6px;font-size:13px"><input type="checkbox" checked> 원문 같이</label>
+    <button data-f="srt">SRT</button><button data-f="lrc">LRC</button><button data-f="vtt">VTT</button></div>`;
+  slot.querySelectorAll("button").forEach((b) => (b.onclick = () => {
+    const both = slot.querySelector("input").checked, f = b.dataset.f;
+    download(`${base}.ko.${f}`, (f === "srt" ? toSrt : f === "lrc" ? toLrc : toVtt)(rec.lines, both));
+  }));
+}
+async function renderLibrary() {
+  const ul = $("library"); ul.innerHTML = "";
+  const all = ((await db.all()) || []).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (!all.length) { ul.innerHTML = `<li class="hint">아직 저장된 자막이 없습니다. 만든 자막은 이 기기 브라우저에 ‘파일이름@크기’로 저장됩니다.</li>`; return; }
+  for (const r of all) {
+    const li = document.createElement("li"); li.className = "item";
+    li.innerHTML = `<span class="name">${esc(r.name)}</span>
+      <div class="meta">${r.lines?.length || 0}줄${r.duration ? " · " + fmtTime(r.duration) : ""} · ${new Date(r.updatedAt || r.createdAt).toLocaleDateString("ko-KR")}${r.done ? "" : " · 미완성"}</div>
+      <div class="row"><button class="ghost" data-act="exp">내보내기</button><button class="ghost" data-act="del">삭제</button></div><div data-slot></div>`;
+    const slot = li.querySelector("[data-slot]");
+    li.querySelector('[data-act="exp"]').onclick = () => showExporter(r, slot);
+    li.querySelector('[data-act="del"]').onclick = () => {
+      slot.innerHTML = `<div class="confirm">이 자막을 지울까요? <button class="primary">지우기</button><button class="ghost">취소</button></div>`;
+      const [yes, no] = slot.querySelectorAll("button");
+      no.onclick = () => (slot.innerHTML = "");
+      yes.onclick = async () => {
+        await db.del(r.key);
+        const o = opened.find((x) => x.key === r.key); if (o) o.rec = null;
+        if (current?.key === r.key) { current.rec = null; renderLines(); }
+        renderOpened(); renderLibrary(); toast("지웠습니다");
+      };
+    };
+    ul.appendChild(li);
+  }
+}
+
+/* 첫 화면: 어떤 모습인지 보이도록 예시 자막 */
+const DEMO = [
+  { s: 0, e: 2.3, ja: "おかえり、兄さん。", ko: "어서 와, 오빠." },
+  { s: 2.9, e: 6.1, ja: "……別に待ってないけど。", ko: "……딱히 기다린 건 아니지만." },
+  { s: 7.0, e: 10.4, ja: "ほら、ここに頭のせて。耳かきしてあげる。", ko: "자, 여기 머리 올려. 귀 파 줄게." },
+];
+function renderDemo() {
+  setStage(DEMO[0], DEMO[1], DEMO[2]);
+  renderLines(DEMO);
+  $("lines").querySelectorAll("li")[1]?.classList.add("cur");
+}
+renderDemo(); renderOpened(); renderLibrary();
+</script>
+</body>
+</html>

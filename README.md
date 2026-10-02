@@ -10,6 +10,22 @@ RJ01234567/
 └── 01_おかえりなさい.ko.vtt   ← 웹/브라우저 플레이어용
 ```
 
+## 폰에서 쓰기: 귀자막 웹앱 (`docs/index.html`)
+
+설치 없이 폰 브라우저에서 파일을 열면 자막을 만들고, 자막을 띄운 채 재생합니다.
+
+- **API 키는 그 기기 브라우저에만 저장**됩니다. Vercel AI Gateway 키 하나로 받아쓰기(MAI-Transcribe-2 / Grok STT)와 번역(Claude)을 모두 처리합니다.
+- 만든 자막은 브라우저에 `파일이름@크기` 로 저장됩니다. 다음에 같은 파일을 열면 자동으로 붙습니다. 음성 파일 자체는 저장하지 않습니다.
+- WAV 는 통째로 메모리에 올리지 않고 필요한 부분만 읽습니다. 1분 안팎으로 잘라 보내고, 조각마다 중간 저장을 하므로 탭이 꺼져도 **이어서 만들기**로 계속할 수 있습니다.
+- BGM·효과음 있는 버전과 없는 버전처럼 타이밍이 같은 파일은 **다른 자막 연결**로 자막을 공유합니다. 받아쓰기는 효과음 없는 버전으로 하는 편이 정확합니다.
+- SRT / LRC / VTT 로 내보내기 가능합니다.
+
+### 처음 한 번: GitHub Pages 켜기
+저장소 **Settings → Pages → Build and deployment** 에서 Source 를 *Deploy from a branch*, 브랜치를 `claude/keen-brahmagupta-d5bvz3`, 폴더를 `/docs` 로 저장합니다.
+1~2분 뒤 `https://b1bibig.github.io/voices/` 에서 열립니다.
+
+## PC 에서 쓰기: 명령줄 도구 (`jp2ko.py`)
+
 동작 방식:
 1. **일본어 받아쓰기** — 둘 중 선택
    - `--asr vercel` (기본): [Vercel AI Gateway](https://vercel.com/ai-gateway) 의 **MAI-Transcribe-2** / **Grok STT**. GPU 필요 없음.
