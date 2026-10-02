@@ -193,6 +193,27 @@ details.card[open] > summary::after { content: "접기"; }
             <option value="spacexai/grok-stt">Grok STT · 시간당 $0.10</option>
           </select>
         </label>
+        <label class="f"><span><b>번역 경로</b></span>
+          <select id="trVia">
+            <option value="vercel">Vercel AI Gateway (같은 키)</option>
+            <option value="relay">내 릴레이 (OpenAI 호환 주소)</option>
+          </select>
+        </label>
+      </div>
+      <div class="form" id="relayWrap" hidden>
+        <label class="f"><span><b>릴레이 주소</b> — PocketRisu 에 넣은 주소 그대로 (…/v1 까지 또는 …/chat/completions 까지)</span>
+          <input id="relayUrl" type="text" spellcheck="false" autocomplete="off" placeholder="https://codex.zcxv.xyz/…/v1">
+        </label>
+        <div class="grid2">
+          <label class="f"><span><b>릴레이 키</b> (없으면 비워 두기)</span>
+            <input id="relayKey" type="password" spellcheck="false" autocomplete="off">
+          </label>
+          <label class="f"><span><b>모델 이름</b> (PocketRisu 에서 쓰는 이름)</span>
+            <input id="relayModel" type="text" spellcheck="false" autocomplete="off" placeholder="예) claude-opus-5-5">
+          </label>
+        </div>
+      </div>
+      <div class="grid2" id="vercelTrWrap">
         <label class="f"><span><b>번역 모델</b></span>
           <select id="trModel">
             <option value="anthropic/claude-opus-5.5">Claude Opus 5.5 · 품질 우선</option>
@@ -200,7 +221,6 @@ details.card[open] > summary::after { content: "접기"; }
             <option value="custom">직접 입력</option>
           </select>
         </label>
-      </div>
       <label class="f" id="customWrap" hidden><span>번역 모델 ID (AI Gateway 표기)</span>
         <input id="trCustom" type="text" spellcheck="false" placeholder="예) deepseek/deepseek-v4-pro">
       </label>
@@ -211,6 +231,7 @@ details.card[open] > summary::after { content: "접기"; }
           <option value="high">높음</option>
         </select>
       </label>
+      </div>
       <p class="hint">Vercel 무료 크레딧은 30일마다 $5입니다. 크레딧을 직접 구매하면 무료 지급이 멈춥니다. 키는 <a href="https://vercel.com/ai-gateway" target="_blank" rel="noopener">vercel.com/ai-gateway</a> → API Keys 에서 만듭니다.</p>
       <p class="hint" id="usage"></p>
     </div>
@@ -251,6 +272,12 @@ function bindSetting(id, key, ev = "change") {
 bindSetting("apiKey", "key", "input");
 bindSetting("asrModel", "asr");
 bindSetting("trModel", "tr");
+bindSetting("trVia", "via");
+bindSetting("relayUrl", "relayUrl", "input");
+bindSetting("relayKey", "relayKey", "input");
+bindSetting("relayModel", "relayModel", "input");
+const syncVia = () => { const relay = $("trVia").value === "relay"; $("relayWrap").hidden = !relay; $("vercelTrWrap").hidden = relay; };
+$("trVia").addEventListener("change", syncVia); syncVia();
 bindSetting("trCustom", "trCustom", "input");
 bindSetting("effort", "effort");
 bindSetting("context", "context", "input");
@@ -495,7 +522,54 @@ function addUsage(model, u) {
   const p = PRICES[model]; if (p) usage.cost += ((u.input_tokens || 0) * p[0] + (u.output_tokens || 0) * p[1]) / 1e6;
   $("usage").textContent = `이번 접속 번역 사용량: 입력 ${usage.in.toLocaleString()} · 출력 ${usage.out.toLocaleString()} 토큰${usage.cost ? ` · 약 $${usage.cost.toFixed(3)}` : ""}`;
 }
+function parseLines(text) {
+  const m = text.match(/\{[\s\S]*\}/);
+  try {
+    const data = JSON.parse(m ? m[0] : text);
+    return { refused: false, map: new Map((data.lines || []).map((l) => [Number(l.id), String(l.ko || "").trim()])) };
+  } catch { return { refused: false, map: new Map(), bad: true }; }
+}
+function sseText(raw) {   // 스트림으로 돌아와도 내용만 모으기
+  let out = "";
+  for (const line of raw.split("\n")) {
+    const d = line.replace(/^data:\s?/, "").trim();
+    if (!line.startsWith("data:") || !d || d === "[DONE]") continue;
+    try { const j = JSON.parse(d); out += j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ""; } catch {}
+  }
+  return out;
+}
+async function relayTranslate(batch, prev, context) {
+  let url = $("relayUrl").value.trim().replace(/\/+$/, "");
+  const model = $("relayModel").value.trim(), key = $("relayKey").value.trim();
+  if (!url || !model) throw new ApiError(0, "설정에서 릴레이 주소와 모델 이름을 넣어 주세요.");
+  if (!/\/chat\/completions$/.test(url)) url += "/chat/completions";
+  const body = { model, stream: false, messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: buildPrompt(batch, prev, context) }] };
+  for (let attempt = 0; ; attempt++) {
+    let r;
+    try {
+      r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) }, body: JSON.stringify(body) });
+    } catch {
+      if (attempt < 2) { await sleep(3000 * 2 ** attempt); continue; }
+      throw new ApiError(0, "릴레이에 연결하지 못했습니다. 주소를 확인해 주세요.");
+    }
+    if (!r.ok) {
+      const t = (await r.text().catch(() => "")).slice(0, 200);
+      if ([429, 500, 502, 503, 504].includes(r.status) && attempt < 2) { await sleep(3000 * 2 ** attempt); continue; }
+      if (r.status === 401 || r.status === 403) throw new ApiError(r.status, "릴레이가 키를 거부했습니다. 설정의 릴레이 키를 확인해 주세요.");
+      if (r.status === 404) throw new ApiError(r.status, "릴레이 주소에서 /chat/completions 를 찾지 못했습니다. PocketRisu 에 넣은 주소와 같은지 확인해 주세요.");
+      throw new ApiError(r.status, `릴레이 오류 ${r.status}: ${t}`);
+    }
+    const raw = await r.text();
+    if (/^\s*data:/.test(raw)) return parseLines(sseText(raw));
+    let j; try { j = JSON.parse(raw); } catch { return parseLines(raw); }
+    const choice = j.choices?.[0] || {};
+    if (j.usage) addUsage(model, { input_tokens: j.usage.prompt_tokens, output_tokens: j.usage.completion_tokens });
+    if (choice.finish_reason === "content_filter") return { refused: true, map: new Map() };
+    return parseLines(choice.message?.content || "");
+  }
+}
 async function translateBatch(batch, prev, context) {
+  if ($("trVia").value === "relay") return relayTranslate(batch, prev, context);
   const model = trModel();
   if (!model) throw new ApiError(0, "설정에서 번역 모델 ID 를 입력해 주세요.");
   const base = { model, max_tokens: 16000, system: SYSTEM_PROMPT, messages: [{ role: "user", content: buildPrompt(batch, prev, context) }] };
@@ -511,12 +585,7 @@ async function translateBatch(batch, prev, context) {
   }
   addUsage(model, res.usage);
   if (res.stop_reason === "refusal") return { refused: true, map: new Map() };
-  const text = (res.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
-  const m = text.match(/\{[\s\S]*\}/);
-  try {
-    const data = JSON.parse(m ? m[0] : text);
-    return { refused: false, map: new Map((data.lines || []).map((l) => [Number(l.id), String(l.ko || "").trim()])) };
-  } catch { return { refused: false, map: new Map(), bad: true }; }
+  return parseLines((res.content || []).filter((b) => b.type === "text").map((b) => b.text).join(""));
 }
 
 /* ---------------- 작업 (받아쓰기 → 번역, 중간 저장) ---------------- */
